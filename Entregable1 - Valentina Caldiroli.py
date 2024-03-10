@@ -2,22 +2,19 @@ from newsapi import NewsApiClient as Nw
 import psycopg2
 from datetime import datetime
 import pandas as pd 
+from config import NEWAPI_KEY, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE
 
-newsapi = Nw(api_key='d0b09d44ab00472b8b2b4ecb8b016e13')
+newsapi = Nw(api_key = NEWAPI_KEY)
 
 # Conexión a Redshift
-    
-url = "data-engineer-cluster.cyhh5bfevlmn.us-east-1.redshift.amazonaws.com"
-data_base = "data-engineer-database"
-user = "valecaldirolibalenzuela_coderhouse"
-pwd = "m410M6VNNk"
+
 try:
     conn = psycopg2.connect(
-        host = url,
-        dbname = data_base,
-        user = user,
-        password = pwd,
-        port='5439'
+        host = DB_HOST,
+        dbname = DB_DATABASE,
+        user = DB_USER,
+        password = DB_PASSWORD,
+        port= DB_PORT
     )
     print("Conectado correctamente")
     
@@ -44,14 +41,14 @@ with conn.cursor() as cur:
     """)
     conn.commit()
 
-    cur.execute("TRUNCATE TABLE coder_noticias")
-    count = cur.rowcount
-
+fecha = datetime.now().strftime('%Y-%m-%d')
 # Trabajo con los datos 
     
 resultado = newsapi.get_everything(q='Argentina',
                        sort_by='publishedAt',
                         language='es',
+                        from_param= fecha,
+                        to = fecha,
                         page_size=100)
 datos = {'Titulo': [], 'Fuente_id': [],'Fuente': [], 'Autor': [], 'URL': [],'Fecha_publicacion': []}
 for noticia in resultado['articles']:
