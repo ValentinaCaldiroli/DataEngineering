@@ -1,0 +1,4 @@
+python-dotenv
+pandas
+newaspi-python
+psycopg2
