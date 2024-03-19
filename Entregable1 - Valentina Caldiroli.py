@@ -1,7 +1,9 @@
-from newsapi import NewsApiClient as Nw
 import psycopg2
-from datetime import datetime
-import pandas as pd 
+import pandas as pd
+
+from psycopg2.extras import execute_values
+from newsapi import NewsApiClient as Nw
+from datetime import datetime, timedelta
 from config import NEWAPI_KEY, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE
 
 newsapi = Nw(api_key = NEWAPI_KEY)
@@ -35,22 +37,27 @@ with conn.cursor() as cur:
             Autor VARCHAR(255),
             URL VARCHAR(300),
             Fecha_publicacion date,
-            Fecha_carga date,
-            primary key(Titulo, Fuente)
+            Fecha_carga datetime,
+            primary key(Titulo, URL)
         )
     """)
     conn.commit()
 
-fecha = datetime.now().strftime('%Y-%m-%d')
+fecha = datetime.now()
+fecha_ayer = fecha - timedelta(days=1)
+
+# Formatear la fecha como string si es necesario
+fecha_ayer_str = fecha_ayer.strftime('%Y-%m-%d')
+
 # Trabajo con los datos 
     
 resultado = newsapi.get_everything(q='Argentina',
                        sort_by='publishedAt',
                         language='es',
-                        from_param= fecha,
-                        to = fecha,
+                        from_param= fecha_ayer_str,
+                        to = fecha_ayer_str,
                         page_size=100)
-datos = {'Titulo': [], 'Fuente_id': [],'Fuente': [], 'Autor': [], 'URL': [],'Fecha_publicacion': []}
+datos = {'Titulo': [], 'Fuente_id': [],'Fuente': [], 'Autor': [], 'URL': [],'Fecha_publicacion': [], 'Fecha_carga' : []}
 for noticia in resultado['articles']:
 
     datos['Titulo'].append(noticia['title'])
@@ -59,9 +66,27 @@ for noticia in resultado['articles']:
     datos['Autor'].append(noticia['author'])
     datos['URL'].append(noticia['url'])
     datos['Fecha_publicacion'].append(noticia['publishedAt'])
+    datos['Fecha_carga'].append(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
 
 df = pd.DataFrame(datos)
-df.drop_duplicates(subset=['Fuente', 'Autor'], keep='first', inplace=True)
+df.drop_duplicates(subset=['Titulo', 'URL'], keep='first', inplace=True)
 df['Fuente_id'].fillna('Sin datos', inplace=True)
 df.loc[df['Fuente_id'] == '', 'Fuente_id'] = 'Sin datos'
 print(df)
+
+#Insertando los datos en Redsfhift
+with conn.cursor() as cur:
+    execute_values(
+        cur,
+        '''
+        INSERT INTO coder_noticias 
+        VALUES %s
+        ''',
+        [tuple(row) for row in df.values],
+        page_size=len(df)
+    )
+    conn.commit()
+
+
+cur.close()
+conn.close()
